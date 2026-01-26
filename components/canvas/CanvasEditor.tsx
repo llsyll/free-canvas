@@ -150,8 +150,8 @@ const defaultNodes: Node[] = [
 ];
 
 function CanvasEditorContent() {
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const { screenToFlowPosition, fitView, getNodes, setViewport } = useReactFlow();
     const canvasRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
