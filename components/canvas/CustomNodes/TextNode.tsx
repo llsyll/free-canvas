@@ -1,4 +1,4 @@
-import React, { memo, useState, useRef, useEffect } from 'react';
+import React, { memo, useCallback, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { NodeProps, NodeResizer, useReactFlow } from '@xyflow/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +19,12 @@ type TextNodeData = {
     }
 };
 
+const MIN_TEXT_WIDTH = 120;
+const MIN_TEXT_HEIGHT = 56;
+const MAX_TEXT_WIDTH = 720;
+const TEXT_PADDING_X = 16;
+const TEXT_PADDING_Y = 16;
+
 const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
     const { setNodes } = useReactFlow();
     const nodeData = data as unknown as TextNodeData;
@@ -29,15 +35,9 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
     const [isEditing, setIsEditing] = useState(false);
     const [isCtrlPressed, setIsCtrlPressed] = useState(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const measureRef = useRef<HTMLDivElement>(null);
 
-    // 记录初始尺寸,用于计算缩放比例
-    const initialSizeRef = useRef({ width: width || 300, height: height || 150 });
     const lastSizeRef = useRef({ width: width || 300, height: height || 150 });
-
-    // Sync local state 
-    useEffect(() => {
-        setText(nodeData.label || 'Text');
-    }, [nodeData.label]);
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -113,23 +113,32 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
         lastSizeRef.current = { width: currentWidth, height: currentHeight };
     }, [width, height, isCtrlPressed, selected, isEditing, id, setNodes, textStyle.fontSize]);
 
-    const onBlur = () => {
-        if (inputRef.current) {
-            const newVal = inputRef.current.value;
-            setText(newVal);
-            setNodes((nds) => nds.map((n) => {
-                if (n.id === id) {
-                    return { ...n, data: { ...n.data, label: newVal } };
-                }
-                return n;
-            }));
-        }
-        setIsEditing(false);
-    };
+    const updateNode = useCallback((nextText: string, nextSize?: { width: number; height: number }) => {
+        setNodes((nds) => nds.map((n) => {
+            if (n.id !== id) return n;
 
-    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-        // 允许默认粘贴行为,支持 Markdown 格式
-        // 用户可以直接粘贴 Markdown 文本,它会被保存并在非编辑模式下渲染
+            return {
+                ...n,
+                ...(nextSize ? {
+                    width: nextSize.width,
+                    height: nextSize.height,
+                    style: {
+                        ...n.style,
+                        width: nextSize.width,
+                        height: nextSize.height,
+                    },
+                } : {}),
+                data: {
+                    ...n.data,
+                    label: nextText,
+                },
+            };
+        }));
+    }, [id, setNodes]);
+
+    const onBlur = () => {
+        updateNode(text);
+        setIsEditing(false);
     };
 
     // 使用 textStyle 中的字体大小,如果没有则使用默认值 16
@@ -147,11 +156,49 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
         textAlign: textStyle.textAlign || 'left',
     };
 
+    useLayoutEffect(() => {
+        if (!isEditing || !measureRef.current) return;
+
+        const measured = measureRef.current.getBoundingClientRect();
+        const nextWidth = Math.ceil(Math.min(MAX_TEXT_WIDTH, Math.max(MIN_TEXT_WIDTH, measured.width + TEXT_PADDING_X)));
+        const nextHeight = Math.ceil(Math.max(MIN_TEXT_HEIGHT, measured.height + TEXT_PADDING_Y));
+        const currentWidth = Math.round(width || 0);
+        const currentHeight = Math.round(height || 0);
+
+        if (Math.abs(nextWidth - currentWidth) < 2 && Math.abs(nextHeight - currentHeight) < 2) return;
+
+        updateNode(text, { width: nextWidth, height: nextHeight });
+    }, [isEditing, text, textStyle.fontFamily, textStyle.fontSize, textStyle.fontWeight, textStyle.lineHeight, textStyle.letterSpacing, width, height, updateNode]);
+
+    const onTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const nextText = event.target.value;
+        setText(nextText);
+        updateNode(nextText);
+    };
+
     return (
         <div
             className="w-full h-full relative group"
-            onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+            onDoubleClick={(e) => {
+                e.stopPropagation();
+                setText(nodeData.label || 'Text');
+                setIsEditing(true);
+            }}
         >
+            <div
+                ref={measureRef}
+                aria-hidden="true"
+                className="pointer-events-none fixed left-[-10000px] top-[-10000px] whitespace-pre-wrap px-2 py-2"
+                style={{
+                    ...commonStyle,
+                    width: 'max-content',
+                    maxWidth: MAX_TEXT_WIDTH - TEXT_PADDING_X,
+                    overflowWrap: 'break-word',
+                }}
+            >
+                {text || ' '}
+            </div>
+
             <NodeResizer
                 isVisible={selected && !isEditing}
                 minWidth={100}
@@ -168,7 +215,7 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
                 }}
             />
 
-            {/* Shift 键提示 */}
+            {/* Ctrl/Cmd 键提示 */}
             {selected && !isEditing && isCtrlPressed && (
                 <div style={{
                     position: 'absolute',
@@ -200,12 +247,15 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
                 {isEditing ? (
                     <textarea
                         ref={inputRef}
-                        defaultValue={text}
+                        value={text}
+                        onChange={onTextChange}
                         onBlur={onBlur}
-                        onPaste={handlePaste}
                         onKeyDown={(e) => e.stopPropagation()}
-                        className="nodrag w-full h-full bg-white/80 backdrop-blur-sm outline-none resize-none p-2 rounded shadow-sm overflow-auto"
-                        style={commonStyle}
+                        className="nodrag w-full h-full bg-white/80 backdrop-blur-sm outline-none resize-none p-2 rounded shadow-sm overflow-hidden"
+                        style={{
+                            ...commonStyle,
+                            overflowWrap: 'break-word',
+                        }}
                     />
                 ) : (
                     <div

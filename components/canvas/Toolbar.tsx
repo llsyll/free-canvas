@@ -15,6 +15,10 @@ type ToolbarProps = {
     onOpenFile: () => void;
 };
 
+const Divider = () => (
+    <div className="w-8 h-px bg-gray-200/60 mx-auto my-1" />
+);
+
 export default function Toolbar({ activeMode, onSetMode, onAddText, onClear, onFitView, onUndo, onRedo, onSaveFile, onOpenFile }: ToolbarProps) {
     const btnClass = (isActive: boolean, isDestructive = false) => `
         w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ease-out flex-shrink-0
@@ -23,10 +27,6 @@ export default function Toolbar({ activeMode, onSetMode, onAddText, onClear, onF
             : `text-gray-500 hover:scale-110 active:scale-95 ${isDestructive ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-black/5 hover:text-black'}`
         }
     `;
-
-    const Divider = () => (
-        <div className="w-8 h-px bg-gray-200/60 mx-auto my-1" />
-    );
 
     return (
         <div className="flex flex-col items-center gap-2 p-2">

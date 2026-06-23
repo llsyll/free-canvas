@@ -6,6 +6,8 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
+    --font-geist-sans: Arial, Helvetica, sans-serif;
+    --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   }
 
   ::selection {
@@ -24,6 +26,10 @@ body,
   overflow: hidden;
   background-color: #f8fafc;
   /* slate-50 */
+}
+
+body {
+  font-family: var(--font-geist-sans);
 }
 
 /* ReactFlow Overrides for Glassmorphism */
@@ -66,4 +72,11 @@ body,
 .react-flow__controls-button svg {
   fill: #52525b !important;
   /* zinc-600 */
+}
+
+.selection-area {
+  background: rgba(37, 99, 235, 0.10) !important;
+  border: 1px solid rgba(37, 99, 235, 0.45) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55) inset;
 }

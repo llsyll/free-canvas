@@ -1,5 +1,5 @@
 import React, { memo, useRef } from 'react';
-import { Handle, Position, NodeProps, NodeResizer, useReactFlow, ResizeParams } from '@xyflow/react';
+import { NodeProps, NodeResizer, useReactFlow, OnResize, OnResizeStart } from '@xyflow/react';
 
 const ImageNode = ({ id, data, selected }: NodeProps) => {
     const { getNodes, setNodes } = useReactFlow();
@@ -7,7 +7,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     const initialNodesData = useRef<Map<string, { x: number, y: number, w: number, h: number }>>(new Map());
     const startSizeRef = useRef<{ x: number, y: number, w: number, h: number } | null>(null);
 
-    const onResizeStart = (event: any, params: ResizeParams) => {
+    const onResizeStart: OnResizeStart = (_event, params) => {
         const nodes = getNodes();
         initialNodesData.current.clear();
 
@@ -34,7 +34,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
         }
     };
 
-    const onResize = (event: any, params: ResizeParams) => {
+    const onResize: OnResize = (_event, params) => {
         if (!startSizeRef.current || initialNodesData.current.size === 0) return;
 
         const start = startSizeRef.current;

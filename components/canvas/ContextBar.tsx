@@ -2,6 +2,25 @@ import React, { useState } from 'react';
 import { useReactFlow, useOnSelectionChange, Node } from '@xyflow/react';
 import { AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 
+type TextStyle = {
+    color?: string;
+    fontFamily?: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    textDecoration?: string;
+    textAlign?: 'left' | 'center' | 'right';
+    fontSize?: number;
+    lineHeight?: number;
+    letterSpacing?: number;
+};
+
+type TextStyleKey = keyof TextStyle;
+
+type TextNodeData = {
+    label?: string;
+    textStyle?: TextStyle;
+};
+
 const FONTS = [
     { name: 'Sans', value: 'var(--font-geist-sans), sans-serif' },
     { name: 'Serif', value: 'serif' },
@@ -10,31 +29,38 @@ const FONTS = [
 
 const COLORS = ['#000000', '#dc2626', '#ea580c', '#16a34a', '#2563eb', '#7c3aed', '#db2777', '#ffffff'];
 
+const TEXT_ALIGN_OPTIONS = [
+    { value: 'left', label: '左对齐', Icon: AlignLeft },
+    { value: 'center', label: '居中', Icon: AlignCenter },
+    { value: 'right', label: '右对齐', Icon: AlignRight }
+] as const;
+
 export default function ContextBar() {
     const { setNodes } = useReactFlow();
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-    const [style, setStyle] = useState<any>({});
+    const [style, setStyle] = useState<TextStyle>({});
 
     useOnSelectionChange({
         onChange: ({ nodes }) => {
             const textNode = nodes.find(n => n.type === 'text');
             setSelectedNode(textNode || null);
             if (textNode) {
-                setStyle(textNode.data.textStyle || {});
+                setStyle((textNode.data as TextNodeData).textStyle || {});
             }
         },
     });
 
-    const update = (key: string, value: any) => {
+    const update = <K extends TextStyleKey>(key: K, value: TextStyle[K]) => {
         if (!selectedNode) return;
-        setStyle((prev: any) => ({ ...prev, [key]: value }));
+        setStyle((prev) => ({ ...prev, [key]: value }));
         setNodes((nds) => nds.map((n) => {
             if (n.id === selectedNode.id) {
+                const data = n.data as TextNodeData;
                 return {
                     ...n,
                     data: {
                         ...n.data,
-                        textStyle: { ...(n.data.textStyle as object), [key]: value }
+                        textStyle: { ...data.textStyle, [key]: value }
                     }
                 };
             }
@@ -129,11 +155,7 @@ export default function ContextBar() {
 
             {/* Text Align */}
             <div style={{ display: 'flex', gap: '4px' }}>
-                {[
-                    { value: 'left', label: '左对齐', Icon: AlignLeft },
-                    { value: 'center', label: '居中', Icon: AlignCenter },
-                    { value: 'right', label: '右对齐', Icon: AlignRight }
-                ].map(align => (
+                {TEXT_ALIGN_OPTIONS.map(align => (
                     <button
                         key={align.value}
                         onClick={() => update('textAlign', align.value)}
