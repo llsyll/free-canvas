@@ -1,17 +1,22 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
-    --font-geist-sans: Arial, Helvetica, sans-serif;
+    --font-geist-sans: "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", sans-serif;
     --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --surface: rgba(255, 255, 255, 0.86);
+    --surface-strong: rgba(255, 255, 255, 0.96);
+    --line: rgba(24, 24, 27, 0.1);
+    --line-strong: rgba(24, 24, 27, 0.18);
+    --ink: #18181b;
+    --muted: #71717a;
+    --canvas: #f6f6f3;
   }
 
   ::selection {
-    background-color: rgba(59, 130, 246, 0.2);
+    background-color: rgba(24, 24, 27, 0.12);
     color: inherit;
   }
 }
@@ -24,59 +29,85 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: #f8fafc;
-  /* slate-50 */
+  background-color: var(--canvas);
 }
 
 body {
   font-family: var(--font-geist-sans);
+  color: var(--ink);
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ReactFlow Overrides for Glassmorphism */
 .react-flow__minimap {
-  border-radius: 12px !important;
-  background-color: rgba(255, 255, 255, 0.6) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.4) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  background-color: var(--surface) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 8px 24px rgba(24, 24, 27, 0.06) !important;
 }
 
 .react-flow__controls {
-  border-radius: 10px !important;
-  background-color: rgba(255, 255, 255, 0.8) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.6) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  background-color: var(--surface) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 8px 24px rgba(24, 24, 27, 0.06) !important;
   overflow: hidden;
-  padding: 4px !important;
+  padding: 3px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 2px !important;
+  gap: 1px !important;
 }
 
 .react-flow__controls-button {
   border: none !important;
   background: transparent !important;
-  border-radius: 6px !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  width: 28px !important;
-  height: 28px !important;
+  border-radius: 5px !important;
+  transition: background-color 120ms ease, color 120ms ease !important;
+  width: 26px !important;
+  height: 26px !important;
   margin: 0 !important;
 }
 
 .react-flow__controls-button:hover {
-  background-color: rgba(0, 0, 0, 0.05) !important;
-  transform: scale(1.05);
+  background-color: rgba(24, 24, 27, 0.07) !important;
 }
 
 .react-flow__controls-button svg {
   fill: #52525b !important;
-  /* zinc-600 */
 }
 
 .selection-area {
-  background: rgba(37, 99, 235, 0.10) !important;
-  border: 1px solid rgba(37, 99, 235, 0.45) !important;
-  border-radius: 6px !important;
+  background: rgba(24, 24, 27, 0.06) !important;
+  border: 1px solid rgba(24, 24, 27, 0.28) !important;
+  border-radius: 4px !important;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55) inset;
+}
+
+.react-flow__attribution {
+  background: transparent !important;
+  color: rgba(24, 24, 27, 0.35) !important;
+}
+
+.react-flow__attribution a {
+  color: inherit !important;
+}
+
+.canvas-chrome-hidden .react-flow__attribution {
+  display: none !important;
+}
+
+.canvas-content-only .react-flow__selection,
+.canvas-content-only .react-flow__selectionpane,
+.canvas-content-only .selection-area {
+  display: none !important;
+}
+
+details > summary {
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
 }

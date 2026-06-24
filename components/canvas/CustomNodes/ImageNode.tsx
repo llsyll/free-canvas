@@ -82,7 +82,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
     return (
         <div className="relative group/node w-full h-full">
             <NodeResizer
-                color="#0a7ea4"
+                color="#18181b"
                 isVisible={selected}
                 minWidth={20}
                 minHeight={20}
@@ -94,7 +94,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                     height: 8,
                     borderRadius: '50%',
                     border: '1.5px solid white',
-                    backgroundColor: '#0a7ea4',
+                    backgroundColor: '#18181b',
                     opacity: 1
                 }}
                 onResizeStart={onResizeStart}
@@ -102,7 +102,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
             />
 
             {/* Visual Image Container */}
-            <div className={`relative w-full h-full rounded-lg overflow-hidden transition-all duration-75 block ${selected ? 'ring-1 ring-blue-500 ring-offset-1' : 'group-hover/node:ring-1 group-hover/node:ring-blue-500/30'}`}>
+            <div className={`relative block h-full w-full overflow-hidden rounded-md transition-all duration-75 ${selected ? 'ring-1 ring-zinc-900 ring-offset-1' : 'group-hover/node:ring-1 group-hover/node:ring-zinc-900/20'}`}>
                 {data.src ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -113,7 +113,7 @@ const ImageNode = ({ id, data, selected }: NodeProps) => {
                         className="w-full h-full object-fill pointer-events-none select-none block"
                     />
                 ) : (
-                    <div className="w-full h-full p-4 bg-gray-50 text-gray-400 text-xs text-center flex items-center justify-center">Image</div>
+                    <div className="flex h-full w-full items-center justify-center bg-zinc-50 p-4 text-center text-xs text-zinc-400">Image</div>
                 )}
             </div>
 

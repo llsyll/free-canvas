@@ -1,0 +1,8 @@
+name = "free-canvas"
+compatibility_date = "2026-06-23"
+pages_build_output_dir = "out"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "free-canvas-db"
+database_id = "fc2e0872-c2c1-459f-915f-eb6e89b50509"
