@@ -44,6 +44,13 @@ type CanvasFile = {
     updated_at: string;
 };
 
+type CloudStorage = {
+    usedBytes: number;
+    maxBytes: number;
+    maxCanvasBytes: number;
+    fileCount: number;
+};
+
 type CanvasPayload = {
     nodes: Node[];
     edges: Edge[];
@@ -55,17 +62,179 @@ type CloudSaveOptions = {
     refreshFiles?: boolean;
 };
 
-async function apiJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            'content-type': 'application/json',
-            ...(options.headers || {}),
-        },
+const API_REQUEST_TIMEOUT_MS = 20000;
+const CLOUD_SAVE_MAX_BYTES = 1_800_000;
+const IMAGE_MAX_SOURCE_DIMENSION = 1200;
+const IMAGE_EXPORT_QUALITY = 0.72;
+const IMAGE_EXPORT_TYPE = 'image/jpeg';
+const FALLBACK_CLOUD_STORAGE_MAX_BYTES = 150_000_000;
+
+type ApiErrorContext = {
+    method: string;
+    url: string;
+    status?: number;
+    responseBody?: string;
+};
+
+class ApiRequestError extends Error {
+    context: ApiErrorContext;
+
+    constructor(message: string, context: ApiErrorContext) {
+        super(message);
+        this.name = 'ApiRequestError';
+        this.context = context;
+    }
+}
+
+function getRequestMethod(options: RequestInit) {
+    return (options.method || 'GET').toUpperCase();
+}
+
+function getErrorMessage(value: unknown) {
+    if (value instanceof Error) return value.message;
+    return String(value || 'Unknown error');
+}
+
+async function parseApiBody(response: Response) {
+    const text = await response.text().catch(() => '');
+    if (!text) return { data: null as unknown, preview: '' };
+
+    try {
+        return { data: JSON.parse(text) as unknown, preview: text.slice(0, 300) };
+    } catch {
+        return { data: null as unknown, preview: text.slice(0, 300) };
+    }
+}
+
+function extractApiError(data: unknown) {
+    if (!data || typeof data !== 'object' || !('error' in data)) return '';
+    const error = (data as { error?: unknown }).error;
+    return typeof error === 'string' ? error : '';
+}
+
+function formatBytes(bytes: number) {
+    if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)}KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function getTextByteLength(value: string) {
+    return new Blob([value]).size;
+}
+
+function getCloudRequestBody(id: string | null, title: string, nodes: Node[], edges: Edge[]) {
+    return JSON.stringify({
+        id,
+        title,
+        data: { nodes, edges },
     });
-    const data = await response.json().catch(() => ({}));
+}
+
+function loadImageSource(src: string) {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Failed to load image'));
+        image.src = src;
+    });
+}
+
+async function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') {
+                resolve(reader.result);
+                return;
+            }
+            reject(new Error('Failed to read image'));
+        };
+        reader.onerror = () => reject(reader.error || new Error('Failed to read image'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function prepareImageForCanvas(file: File) {
+    const source = await readFileAsDataUrl(file);
+    const image = await loadImageSource(source);
+    const naturalWidth = image.naturalWidth || image.width;
+    const naturalHeight = image.naturalHeight || image.height;
+
+    if (!naturalWidth || !naturalHeight) {
+        throw new Error('Invalid image size');
+    }
+
+    const scale = Math.min(1, IMAGE_MAX_SOURCE_DIMENSION / Math.max(naturalWidth, naturalHeight));
+    const width = Math.max(1, Math.round(naturalWidth * scale));
+    const height = Math.max(1, Math.round(naturalHeight * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Canvas is unavailable');
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+
+    const compressedSrc = canvas.toDataURL(IMAGE_EXPORT_TYPE, IMAGE_EXPORT_QUALITY);
+
+    return {
+        src: compressedSrc.length < source.length ? compressedSrc : source,
+        width,
+        height,
+    };
+}
+
+async function apiJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+    const method = getRequestMethod(options);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+    const abortWithCallerSignal = () => controller.abort();
+
+    if (options.signal) {
+        if (options.signal.aborted) {
+            controller.abort();
+        } else {
+            options.signal.addEventListener('abort', abortWithCallerSignal, { once: true });
+        }
+    }
+
+    let response: Response;
+
+    try {
+        response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+            headers: {
+                'content-type': 'application/json',
+                ...(options.headers || {}),
+            },
+        });
+    } catch (error) {
+        const message = error instanceof DOMException && error.name === 'AbortError'
+            ? `${method} ${url} timed out after ${API_REQUEST_TIMEOUT_MS / 1000}s`
+            : `${method} ${url} network error: ${getErrorMessage(error)}`;
+        throw new ApiRequestError(message, { method, url });
+    } finally {
+        window.clearTimeout(timeoutId);
+        options.signal?.removeEventListener('abort', abortWithCallerSignal);
+    }
+
+    const { data, preview } = await parseApiBody(response);
     if (!response.ok) {
-        throw new Error(data.error || 'Request failed');
+        const serverMessage = extractApiError(data);
+        const statusText = response.statusText ? ` ${response.statusText}` : '';
+        const details = serverMessage || preview;
+        const message = details
+            ? `${method} ${url} failed: HTTP ${response.status}${statusText} - ${details}`
+            : `${method} ${url} failed: HTTP ${response.status}${statusText}`;
+        throw new ApiRequestError(message, {
+            method,
+            url,
+            status: response.status,
+            responseBody: preview,
+        });
     }
     return data as T;
 }
@@ -270,6 +439,7 @@ function CanvasEditorContent() {
     const [password, setPassword] = useState('');
     const [authError, setAuthError] = useState('');
     const [files, setFiles] = useState<CanvasFile[]>([]);
+    const [cloudStorage, setCloudStorage] = useState<CloudStorage | null>(null);
     const [currentCanvasId, setCurrentCanvasId] = useState<string | null>(null);
     const [canvasTitle, setCanvasTitle] = useState('未命名画布');
     const [cloudMessage, setCloudMessage] = useState('');
@@ -293,8 +463,9 @@ function CanvasEditorContent() {
     }, [setNodes, fitView]);
 
     const refreshFiles = useCallback(async () => {
-        const data = await apiJson<{ canvases: CanvasFile[] }>('/api/canvases');
+        const data = await apiJson<{ canvases: CanvasFile[]; storage?: CloudStorage }>('/api/canvases');
         setFiles(data.canvases);
+        setCloudStorage(data.storage || null);
     }, []);
 
     useEffect(() => {
@@ -433,6 +604,7 @@ function CanvasEditorContent() {
         } finally {
             setUser(null);
             setFiles([]);
+            setCloudStorage(null);
             setCurrentCanvasId(null);
             setCloudPanelOpen(false);
             setCloudSyncStatus('未登录');
@@ -452,18 +624,23 @@ function CanvasEditorContent() {
 
         setCloudSyncStatus('同步中');
         const title = canvasTitle.trim() || '未命名画布';
+        const body = getCloudRequestBody(currentCanvasId, title, nodes, edges);
+        const bodyBytes = getTextByteLength(body);
+        if (bodyBytes > CLOUD_SAVE_MAX_BYTES) {
+            throw new Error(`画布数据 ${formatBytes(bodyBytes)}，超出云端保存上限 ${formatBytes(CLOUD_SAVE_MAX_BYTES)}。请删除几张大图或重新拖入压缩后的图片。`);
+        }
+
         try {
-            const data = await apiJson<{ canvas: { id: string; title: string } }>('/api/canvases', {
+            const data = await apiJson<{ canvas: { id: string; title: string }; storage?: CloudStorage }>('/api/canvases', {
                 method: 'POST',
-                body: JSON.stringify({
-                    id: currentCanvasId,
-                    title,
-                    data: { nodes, edges },
-                }),
+                body,
             });
 
             setCurrentCanvasId(data.canvas.id);
             setCanvasTitle(data.canvas.title);
+            if (data.storage) {
+                setCloudStorage(data.storage);
+            }
             lastCloudSnapshotRef.current = buildCloudSnapshot(nodes, edges, data.canvas.title);
             setCloudSyncStatus('已保存');
 
@@ -683,44 +860,28 @@ function CanvasEditorContent() {
     const addImageFileToCanvas = useCallback((file: File, position: { x: number; y: number }) => {
         if (!file.type.startsWith('image/')) return;
 
-        const reader = new FileReader();
-        const img = new Image();
-        img.onload = () => {
-            const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-            let w = img.naturalWidth;
-            let h = img.naturalHeight;
-            const maxDim = 1000;
-            if (w > maxDim || h > maxDim) {
-                const r = w / h;
-                if (w > h) {
-                    w = maxDim;
-                    h = maxDim / r;
-                } else {
-                    h = maxDim;
-                    w = maxDim * r;
-                }
-            }
-            const newNode: Node = {
-                id,
-                type: 'image',
-                position,
-                data: { src: img.src },
-                selected: true,
-                width: w,
-                height: h,
-                style: { width: w, height: h },
-            };
-            setNodes((nds) => [
-                ...nds.map(node => ({ ...node, selected: false })),
-                { ...newNode, zIndex: nds.length },
-            ]);
-        };
-        reader.onload = () => {
-            if (typeof reader.result === 'string') {
-                img.src = reader.result;
-            }
-        };
-        reader.readAsDataURL(file);
+        void prepareImageForCanvas(file)
+            .then(({ src, width, height }) => {
+                const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+                const newNode: Node = {
+                    id,
+                    type: 'image',
+                    position,
+                    data: { src },
+                    selected: true,
+                    width,
+                    height,
+                    style: { width, height },
+                };
+                setNodes((nds) => [
+                    ...nds.map(node => ({ ...node, selected: false })),
+                    { ...newNode, zIndex: nds.length },
+                ]);
+            })
+            .catch((error) => {
+                console.error('Failed to add image:', error);
+                setCloudMessage(error instanceof Error ? error.message : '图片处理失败');
+            });
     }, [setNodes]);
 
     const handleCanvasDragOver = useCallback((event: React.DragEvent) => {
@@ -1079,6 +1240,17 @@ function CanvasEditorContent() {
     const isCanvasOnlyMode = chromeMode === 'canvasOnly';
     const isChromeHidden = chromeMode !== 'normal';
     const hasSelection = nodes.some((node) => node.selected);
+    const currentCanvasBytes = getTextByteLength(getCloudRequestBody(
+        currentCanvasId,
+        canvasTitle.trim() || '未命名画布',
+        nodes,
+        edges,
+    ));
+    const maxCanvasBytes = cloudStorage?.maxCanvasBytes || CLOUD_SAVE_MAX_BYTES;
+    const accountUsedBytes = cloudStorage?.usedBytes || 0;
+    const accountMaxBytes = cloudStorage?.maxBytes || FALLBACK_CLOUD_STORAGE_MAX_BYTES;
+    const canvasStoragePercent = Math.min(100, Math.max(0, (currentCanvasBytes / maxCanvasBytes) * 100));
+    const accountStoragePercent = Math.min(100, Math.max(0, (accountUsedBytes / accountMaxBytes) * 100));
 
     return (
         <div className={`relative h-screen w-screen bg-[#f6f6f3] ${isChromeHidden ? 'canvas-chrome-hidden' : ''} ${isCanvasOnlyMode ? 'canvas-content-only' : ''}`} ref={canvasRef}>
@@ -1212,6 +1384,33 @@ function CanvasEditorContent() {
                                             >
                                                 <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} />
                                             </button>
+                                        </div>
+
+                                        <div className="space-y-2 rounded-md border border-zinc-200 bg-white px-2.5 py-2">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                                                    <span>当前画布</span>
+                                                    <span>{formatBytes(currentCanvasBytes)} / {formatBytes(maxCanvasBytes)}</span>
+                                                </div>
+                                                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                                                    <div
+                                                        className={`h-full rounded-full ${canvasStoragePercent > 85 ? 'bg-red-500' : 'bg-zinc-900'}`}
+                                                        style={{ width: `${canvasStoragePercent}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                                                    <span>账号空间</span>
+                                                    <span>{formatBytes(accountUsedBytes)} / {formatBytes(accountMaxBytes)}</span>
+                                                </div>
+                                                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                                                    <div
+                                                        className={`h-full rounded-full ${accountStoragePercent > 85 ? 'bg-red-500' : 'bg-zinc-900'}`}
+                                                        style={{ width: `${accountStoragePercent}%` }}
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <div className="flex gap-1.5">
