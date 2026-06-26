@@ -26,6 +26,118 @@ const MAX_TEXT_WIDTH = 720;
 const TEXT_PADDING_X = 16;
 const TEXT_PADDING_Y = 16;
 
+type MarkdownContentProps = {
+    text: string;
+    commonStyle: React.CSSProperties;
+    baseFontSize: number;
+};
+
+function MarkdownContent({ text, commonStyle, baseFontSize }: MarkdownContentProps) {
+    const headingBase = {
+        ...commonStyle,
+        fontWeight: 700,
+        lineHeight: 1.2,
+    };
+    const tableCellBase: React.CSSProperties = {
+        border: '1px solid rgba(113, 113, 122, 0.28)',
+        padding: '6px 8px',
+        verticalAlign: 'top',
+        ...commonStyle,
+    };
+
+    return (
+        <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+                a: ({ children, href }) => (
+                    <a
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#2563eb', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                    >
+                        {children}
+                    </a>
+                ),
+                blockquote: ({ children }) => (
+                    <blockquote style={{
+                        margin: '0.65em 0',
+                        padding: '0.15em 0 0.15em 0.75em',
+                        borderLeft: '3px solid rgba(113, 113, 122, 0.35)',
+                        color: commonStyle.color,
+                    }}>
+                        {children}
+                    </blockquote>
+                ),
+                code: ({ children }) => (
+                    <code style={{
+                        backgroundColor: 'rgba(0,0,0,0.06)',
+                        padding: '2px 4px',
+                        borderRadius: '3px',
+                        fontFamily: 'var(--font-geist-mono), monospace',
+                        fontSize: `${baseFontSize * 0.9}px`,
+                    }}>{children}</code>
+                ),
+                del: ({ children }) => <del style={{ opacity: 0.75 }}>{children}</del>,
+                em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+                h1: ({ children }) => <h1 style={{ ...headingBase, margin: '0.55em 0 0.35em', fontSize: `${baseFontSize * 1.85}px` }}>{children}</h1>,
+                h2: ({ children }) => <h2 style={{ ...headingBase, margin: '0.5em 0 0.3em', fontSize: `${baseFontSize * 1.55}px` }}>{children}</h2>,
+                h3: ({ children }) => <h3 style={{ ...headingBase, margin: '0.45em 0 0.28em', fontSize: `${baseFontSize * 1.28}px` }}>{children}</h3>,
+                h4: ({ children }) => <h4 style={{ ...headingBase, margin: '0.4em 0 0.25em', fontSize: `${baseFontSize * 1.12}px` }}>{children}</h4>,
+                h5: ({ children }) => <h5 style={{ ...headingBase, margin: '0.35em 0 0.2em', fontSize: `${baseFontSize}px` }}>{children}</h5>,
+                h6: ({ children }) => <h6 style={{ ...headingBase, margin: '0.3em 0 0.2em', fontSize: `${baseFontSize * 0.9}px`, opacity: 0.75 }}>{children}</h6>,
+                hr: () => <hr style={{ border: 0, borderTop: '1px solid rgba(113, 113, 122, 0.28)', margin: '0.8em 0' }} />,
+                img: ({ alt, src }) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                        alt={alt || ''}
+                        src={src || ''}
+                        style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0.5em 0', borderRadius: 4 }}
+                    />
+                ),
+                input: (props) => (
+                    <input
+                        {...props}
+                        readOnly
+                        style={{ margin: '0 0.45em 0 0', transform: 'translateY(1px)' }}
+                    />
+                ),
+                li: ({ children }) => <li style={{ margin: '0.22em 0', paddingLeft: '0.1em' }}>{children}</li>,
+                ol: ({ children }) => <ol style={{ margin: '0.55em 0', paddingLeft: '1.45em' }}>{children}</ol>,
+                p: ({ children }) => <p style={{ margin: '0.32em 0', ...commonStyle }}>{children}</p>,
+                pre: ({ children }) => (
+                    <pre style={{
+                        margin: '0.65em 0',
+                        padding: '8px 10px',
+                        overflowX: 'auto',
+                        borderRadius: 6,
+                        backgroundColor: 'rgba(24, 24, 27, 0.06)',
+                        fontFamily: 'var(--font-geist-mono), monospace',
+                        fontSize: `${baseFontSize * 0.9}px`,
+                        lineHeight: 1.55,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                    }}>{children}</pre>
+                ),
+                strong: ({ children }) => <strong style={{ fontWeight: 700 }}>{children}</strong>,
+                table: ({ children }) => (
+                    <div style={{ maxWidth: '100%', overflowX: 'auto', margin: '0.65em 0' }}>
+                        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: `${baseFontSize * 0.92}px` }}>{children}</table>
+                    </div>
+                ),
+                tbody: ({ children }) => <tbody>{children}</tbody>,
+                td: ({ children }) => <td style={tableCellBase}>{children}</td>,
+                th: ({ children }) => <th style={{ ...tableCellBase, backgroundColor: 'rgba(24, 24, 27, 0.05)', fontWeight: 700 }}>{children}</th>,
+                thead: ({ children }) => <thead>{children}</thead>,
+                tr: ({ children }) => <tr>{children}</tr>,
+                ul: ({ children }) => <ul style={{ margin: '0.55em 0', paddingLeft: '1.45em' }}>{children}</ul>,
+            }}
+        >
+            {text}
+        </ReactMarkdown>
+    );
+}
+
 const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
     const { setNodes } = useReactFlow();
     const nodeData = data as unknown as TextNodeData;
@@ -247,7 +359,11 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
                     wordBreak: 'break-word',
                 }}
             >
-                {text || ' '}
+                {textStyle.fontFamily?.includes('mono') ? (
+                    text || ' '
+                ) : (
+                    <MarkdownContent text={text || ' '} commonStyle={commonStyle} baseFontSize={baseFontSize} />
+                )}
             </div>
 
             <NodeResizer
@@ -347,29 +463,7 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
                                 {text}
                             </pre>
                         ) : (
-                            <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                    p: ({ children }) => <p style={{ margin: '0.25em 0', ...commonStyle }}>{children}</p>,
-                                    h1: ({ children }) => <h1 style={{ margin: '0.5em 0', fontSize: `${baseFontSize * 1.8}px`, fontWeight: 'bold', ...commonStyle }}>{children}</h1>,
-                                    h2: ({ children }) => <h2 style={{ margin: '0.4em 0', fontSize: `${baseFontSize * 1.5}px`, fontWeight: 'bold', ...commonStyle }}>{children}</h2>,
-                                    h3: ({ children }) => <h3 style={{ margin: '0.3em 0', fontSize: `${baseFontSize * 1.2}px`, fontWeight: 'bold', ...commonStyle }}>{children}</h3>,
-                                    strong: ({ children }) => <strong style={{ fontWeight: 'bold' }}>{children}</strong>,
-                                    em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
-                                    code: ({ children }) => <code style={{
-                                        backgroundColor: 'rgba(0,0,0,0.05)',
-                                        padding: '2px 4px',
-                                        borderRadius: '3px',
-                                        fontFamily: 'var(--font-geist-mono), monospace',
-                                        fontSize: `${baseFontSize * 0.9}px`,
-                                    }}>{children}</code>,
-                                    ul: ({ children }) => <ul style={{ margin: '0.5em 0', paddingLeft: '20px' }}>{children}</ul>,
-                                    ol: ({ children }) => <ol style={{ margin: '0.5em 0', paddingLeft: '20px' }}>{children}</ol>,
-                                    li: ({ children }) => <li style={{ margin: '0.2em 0' }}>{children}</li>,
-                                }}
-                            >
-                                {text}
-                            </ReactMarkdown>
+                            <MarkdownContent text={text} commonStyle={commonStyle} baseFontSize={baseFontSize} />
                         )}
                     </div>
                 )}
