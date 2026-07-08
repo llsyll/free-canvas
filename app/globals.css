@@ -26,6 +26,7 @@ body,
 #root {
   width: 100%;
   height: 100%;
+  min-height: 100dvh;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -37,6 +38,25 @@ body {
   color: var(--ink);
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.react-flow {
+  touch-action: none;
+}
+
+.react-flow__pane,
+.react-flow__node,
+.react-flow__viewport {
+  touch-action: none;
 }
 
 .react-flow__minimap {
@@ -102,6 +122,103 @@ body {
 .canvas-content-only .react-flow__selectionpane,
 .canvas-content-only .selection-area {
   display: none !important;
+}
+
+.canvas-touch-app .react-flow__selection,
+.canvas-touch-app .react-flow__selectionpane,
+.canvas-touch-app .selection-area,
+.canvas-touch-app .react-flow__attribution {
+  display: none !important;
+}
+
+.canvas-touch-app.react-flow,
+.canvas-touch-app .react-flow {
+  height: 100dvh;
+}
+
+.canvas-touch-app .react-flow__panel.top.right {
+  top: max(12px, calc(env(safe-area-inset-top, 0px) + 12px));
+  right: max(12px, calc(env(safe-area-inset-right, 0px) + 12px));
+  margin: 0 !important;
+}
+
+.canvas-touch-app .cloud-status-button {
+  min-width: 0;
+  height: 36px;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.canvas-touch-app .cloud-status-label {
+  display: none;
+}
+
+.canvas-touch-app .cloud-status-chevron {
+  width: 12px;
+  height: 12px;
+}
+
+.mobile-toolbar-dock {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, calc(env(safe-area-inset-bottom, 0px) + 18px));
+  z-index: 20;
+  width: max-content;
+  max-width: calc(100vw - max(24px, calc(env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px) + 24px)));
+  transform: translateX(-50%);
+}
+
+.canvas-touch-app .canvas-toolbar {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 2px;
+  overflow-x: auto;
+  border-radius: 999px;
+  padding: 6px;
+  scrollbar-width: none;
+}
+
+.canvas-touch-app .canvas-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.canvas-touch-app .canvas-toolbar > .h-px {
+  display: none;
+}
+
+.canvas-touch-app .canvas-toolbar button {
+  height: 30px;
+  width: 30px;
+  flex: 0 0 30px;
+}
+
+.canvas-touch-app .toolbar-menu-popover {
+  left: 50%;
+  top: auto;
+  bottom: calc(100% + 10px);
+  margin-left: 0;
+  transform: translateX(-50%);
+}
+
+@media (pointer: coarse) {
+  html,
+  body {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    height: 100dvh;
+    user-select: none;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+    -webkit-user-select: text;
+  }
 }
 
 details > summary {

@@ -68,6 +68,7 @@ const IMAGE_MAX_SOURCE_DIMENSION = 1200;
 const IMAGE_EXPORT_QUALITY = 0.72;
 const IMAGE_EXPORT_TYPE = 'image/jpeg';
 const FALLBACK_CLOUD_STORAGE_MAX_BYTES = 150_000_000;
+const COARSE_POINTER_QUERY = '(pointer: coarse)';
 
 type ApiErrorContext = {
     method: string;
@@ -127,6 +128,11 @@ function getCloudRequestBody(id: string | null, title: string, nodes: Node[], ed
         title,
         data: { nodes, edges },
     });
+}
+
+function isCoarsePointerDevice() {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia(COARSE_POINTER_QUERY).matches || navigator.maxTouchPoints > 0;
 }
 
 function loadImageSource(src: string) {
@@ -448,6 +454,7 @@ function CanvasEditorContent() {
     const [cloudAvailable, setCloudAvailable] = useState(false);
     const [cloudPanelOpen, setCloudPanelOpen] = useState(false);
     const [chromeMode, setChromeMode] = useState<ChromeMode>('normal');
+    const [isTouchViewport, setIsTouchViewport] = useState(false);
 
     // Undo/Redo state
     const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
@@ -461,6 +468,21 @@ function CanvasEditorContent() {
         // Center view after a short delay
         setTimeout(() => fitView({ duration: 800 }), 100);
     }, [setNodes, fitView]);
+
+    useEffect(() => {
+        const media = window.matchMedia(COARSE_POINTER_QUERY);
+        const updateTouchViewport = () => {
+            const nextIsTouch = isCoarsePointerDevice();
+            setIsTouchViewport(nextIsTouch);
+            if (nextIsTouch) {
+                setToolMode('hand');
+            }
+        };
+
+        updateTouchViewport();
+        media.addEventListener('change', updateTouchViewport);
+        return () => media.removeEventListener('change', updateTouchViewport);
+    }, []);
 
     const refreshFiles = useCallback(async () => {
         const data = await apiJson<{ canvases: CanvasFile[]; storage?: CloudStorage }>('/api/canvases');
@@ -1234,8 +1256,32 @@ function CanvasEditorContent() {
         lastClickTimeRef.current = now;
     }, [createTextNode, screenToFlowPosition, textInsertMode]);
 
+    const handleNodeClick = useCallback((event: React.MouseEvent, clickedNode: Node) => {
+        if (isTouchViewport) {
+            setNodes((current) => current.map((node) => ({
+                ...node,
+                selected: node.id === clickedNode.id,
+            })));
+            return;
+        }
+
+        if (!event.shiftKey && !event.metaKey && !event.ctrlKey) return;
+
+        event.stopPropagation();
+        const shouldAdd = !clickedNode.selected;
+        setNodes((current) => current.map((node) => (
+            node.id === clickedNode.id
+                ? { ...node, selected: shouldAdd }
+                : node
+        )));
+    }, [isTouchViewport, setNodes]);
+
     const isHandActive = toolMode === 'hand' || isSpacePressed;
+    const shouldUseTouchCanvasGestures = isTouchViewport && !textInsertMode;
     const canDragNodes = toolMode === 'select' && !isSpacePressed;
+    const canDragNodesInViewport = shouldUseTouchCanvasGestures ? toolMode === 'select' : canDragNodes;
+    const shouldPanOnDrag = shouldUseTouchCanvasGestures ? true : isHandActive;
+    const shouldSelectionOnDrag = !shouldUseTouchCanvasGestures && !isHandActive;
     const isFullscreenMode = chromeMode === 'fullscreen';
     const isCanvasOnlyMode = chromeMode === 'canvasOnly';
     const isChromeHidden = chromeMode !== 'normal';
@@ -1253,21 +1299,24 @@ function CanvasEditorContent() {
     const accountStoragePercent = Math.min(100, Math.max(0, (accountUsedBytes / accountMaxBytes) * 100));
 
     return (
-        <div className={`relative h-screen w-screen bg-[#f6f6f3] ${isChromeHidden ? 'canvas-chrome-hidden' : ''} ${isCanvasOnlyMode ? 'canvas-content-only' : ''}`} ref={canvasRef}>
+        <div className={`relative h-screen w-screen bg-[#f6f6f3] ${isChromeHidden ? 'canvas-chrome-hidden' : ''} ${isCanvasOnlyMode ? 'canvas-content-only' : ''} ${isTouchViewport ? 'canvas-touch-app' : ''}`} ref={canvasRef}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onNodeClick={handleNodeClick}
                 nodeTypes={nodeTypes}
+                proOptions={{ hideAttribution: true }}
                 fitView
 
-                nodesDraggable={canDragNodes}
+                nodesDraggable={canDragNodesInViewport}
                 nodesConnectable={false}
 
-                selectionOnDrag={!isHandActive}
-                panOnDrag={isHandActive}
+                selectionOnDrag={shouldSelectionOnDrag}
+                selectNodesOnDrag={!isTouchViewport}
+                panOnDrag={shouldPanOnDrag}
                 panActivationKeyCode={toolMode === 'select' ? "Space" : undefined}
 
                 selectionKeyCode="Shift"
@@ -1276,6 +1325,8 @@ function CanvasEditorContent() {
                 zIndexMode="manual"
                 panOnScroll={false}
                 zoomOnScroll={true}
+                zoomOnPinch={true}
+                preventScrolling={true}
                 minZoom={0.1}
                 maxZoom={4}
                 zoomOnDoubleClick={false}
@@ -1283,13 +1334,13 @@ function CanvasEditorContent() {
                 onDragOver={handleCanvasDragOver}
                 onDrop={handleCanvasDrop}
             >
-                {!isChromeHidden && <Controls position="bottom-left" showInteractive={false} />}
-                {!isChromeHidden && <MiniMap position="bottom-right" style={{ height: 96, width: 144 }} />}
+                {!isChromeHidden && !isTouchViewport && <Controls position="bottom-left" showInteractive={false} />}
+                {!isChromeHidden && !isTouchViewport && <MiniMap position="bottom-right" style={{ height: 96, width: 144 }} />}
                 {!isCanvasOnlyMode && <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#deded7" />}
 
                 {!isChromeHidden && <ContextBar />}
 
-                {!isChromeHidden && <Panel position="top-left" className="!m-4">
+                {!isChromeHidden && !isTouchViewport && <Panel position="top-left" className="!m-4">
                     <Toolbar
                         activeMode={isSpacePressed ? 'hand' : toolMode}
                         textInsertMode={textInsertMode}
@@ -1326,20 +1377,20 @@ function CanvasEditorContent() {
                             <button
                                 type="button"
                                 onClick={() => setCloudPanelOpen(true)}
-                                className="inline-flex h-11 w-fit min-w-[176px] items-center justify-between gap-3 rounded-full border border-zinc-200/90 bg-white/90 px-3.5 text-left text-zinc-800 shadow-[0_8px_24px_rgba(24,24,27,0.06)] backdrop-blur-xl whitespace-nowrap"
+                                className="cloud-status-button inline-flex h-11 w-fit min-w-[176px] items-center justify-between gap-3 rounded-full border border-zinc-200/90 bg-white/90 px-3.5 text-left text-zinc-800 shadow-[0_8px_24px_rgba(24,24,27,0.06)] backdrop-blur-xl whitespace-nowrap"
                                 title="打开云端面板"
                             >
                                 <span className="flex min-w-0 items-center gap-2">
                                     <Cloud className="h-3.5 w-3.5 text-zinc-500" strokeWidth={1.8} />
-                                    <span className="min-w-0 truncate text-xs font-medium text-zinc-600">
+                                    <span className="cloud-status-label min-w-0 truncate text-xs font-medium text-zinc-600">
                                         {user ? '已登录' : 'Cloud / 登录'}
                                     </span>
                                 </span>
                                 <span className="flex items-center gap-2">
-                                    <span className="text-[11px] text-zinc-400">
+                                    <span className="cloud-status-value text-[11px] text-zinc-400">
                                         {cloudSyncStatus}
                                     </span>
-                                    <ChevronRight className="h-3.5 w-3.5 text-zinc-400" strokeWidth={1.8} />
+                                    <ChevronRight className="cloud-status-chevron h-3.5 w-3.5 text-zinc-400" strokeWidth={1.8} />
                                 </span>
                             </button>
                         ) : (
@@ -1522,6 +1573,38 @@ function CanvasEditorContent() {
                     onChange={handleOpenFile}
                 />
             </ReactFlow>
+            {!isChromeHidden && isTouchViewport && (
+                <div className="mobile-toolbar-dock">
+                    <Toolbar
+                        activeMode={isSpacePressed ? 'hand' : toolMode}
+                        textInsertMode={textInsertMode}
+                        chromeMode={chromeMode}
+                        onSetMode={setToolMode}
+                        onAddText={handleAddText}
+                        onClear={handleClear}
+                        onFitView={() => fitView({ duration: 800 })}
+                        onUndo={undo}
+                        onRedo={redo}
+                        onSaveFile={handleSaveFile}
+                        onOpenFile={() => fileInputRef.current?.click()}
+                        onEnterFullscreen={handleEnterFullscreen}
+                        onEnterCanvasOnly={handleEnterCanvasOnly}
+                        hasSelection={hasSelection}
+                        onAlignLeft={handleAlignLeft}
+                        onAlignCenter={handleAlignCenter}
+                        onAlignRight={handleAlignRight}
+                        onAlignTop={handleAlignTop}
+                        onAlignMiddle={handleAlignMiddle}
+                        onAlignBottom={handleAlignBottom}
+                        onDistributeHorizontal={handleDistributeHorizontal}
+                        onDistributeVertical={handleDistributeVertical}
+                        onSendToBack={handleSendToBack}
+                        onMoveDown={handleMoveDown}
+                        onMoveUp={handleMoveUp}
+                        onBringToFront={handleBringToFront}
+                    />
+                </div>
+            )}
         </div>
     );
 }

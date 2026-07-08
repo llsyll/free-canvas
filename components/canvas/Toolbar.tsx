@@ -110,7 +110,7 @@ function MenuGroup({ label, icon, open, onToggle, onClose, children }: MenuGroup
                         className="fixed inset-0 z-40 cursor-default bg-transparent"
                         onClick={onClose}
                     />
-                    <div className="absolute left-full top-0 z-50 ml-2 min-w-40 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-[0_12px_32px_rgba(24,24,27,0.12)]">
+                    <div className="toolbar-menu-popover absolute left-full top-0 z-50 ml-2 min-w-40 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-[0_12px_32px_rgba(24,24,27,0.12)]">
                         <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">{label}</div>
                         <div className="space-y-0.5">{children}</div>
                     </div>
@@ -188,7 +188,7 @@ export default function Toolbar({
     `;
 
     return (
-        <div ref={toolbarRef} className="flex w-12 flex-col items-center gap-1 rounded-lg border border-zinc-200/80 bg-white/95 p-1.5 shadow-[0_8px_24px_rgba(24,24,27,0.05)] backdrop-blur-xl">
+        <div ref={toolbarRef} className="canvas-toolbar flex w-12 flex-col items-center gap-1 rounded-lg border border-zinc-200/80 bg-white/95 p-1.5 shadow-[0_8px_24px_rgba(24,24,27,0.05)] backdrop-blur-xl">
             {/* Navigation */}
             <button onClick={() => runAndClose(() => onSetMode('select'))} className={btnClass(activeMode === 'select')} title="Select Mode (V)">
                 <MousePointer2 className="pointer-events-none h-4 w-4" strokeWidth={1.8} />

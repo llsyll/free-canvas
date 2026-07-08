@@ -306,6 +306,7 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
         fontStyle: textStyle.fontStyle || 'normal',
         textDecoration: textStyle.textDecoration || 'none',
         textAlign: textStyle.textAlign || 'left',
+        whiteSpace: 'pre-wrap',
     };
 
     useLayoutEffect(() => {
