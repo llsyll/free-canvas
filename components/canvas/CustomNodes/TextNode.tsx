@@ -102,9 +102,24 @@ function MarkdownContent({ text, commonStyle, baseFontSize }: MarkdownContentPro
                         style={{ margin: '0 0.45em 0 0', transform: 'translateY(1px)' }}
                     />
                 ),
-                li: ({ children }) => <li style={{ margin: '0.22em 0', paddingLeft: '0.1em' }}>{children}</li>,
-                ol: ({ children }) => <ol style={{ margin: '0.55em 0', paddingLeft: '1.45em' }}>{children}</ol>,
-                p: ({ children }) => <p style={{ margin: '0.32em 0', ...commonStyle }}>{children}</p>,
+                li: ({ children, className }) => (
+                    <li
+                        className={className}
+                        style={{
+                            margin: '0.22em 0',
+                            paddingLeft: '0.1em',
+                            listStyleType: className?.includes('task-list-item') ? 'none' : 'inherit',
+                        }}
+                    >
+                        {children}
+                    </li>
+                ),
+                ol: ({ children }) => (
+                    <ol style={{ margin: '0.28em 0', paddingLeft: '1.45em', listStyleType: 'decimal' }}>
+                        {children}
+                    </ol>
+                ),
+                p: ({ children }) => <p style={{ ...commonStyle, margin: 0 }}>{children}</p>,
                 pre: ({ children }) => (
                     <pre style={{
                         margin: '0.65em 0',
@@ -130,7 +145,18 @@ function MarkdownContent({ text, commonStyle, baseFontSize }: MarkdownContentPro
                 th: ({ children }) => <th style={{ ...tableCellBase, backgroundColor: 'rgba(24, 24, 27, 0.05)', fontWeight: 700 }}>{children}</th>,
                 thead: ({ children }) => <thead>{children}</thead>,
                 tr: ({ children }) => <tr>{children}</tr>,
-                ul: ({ children }) => <ul style={{ margin: '0.55em 0', paddingLeft: '1.45em' }}>{children}</ul>,
+                ul: ({ children, className }) => (
+                    <ul
+                        className={className}
+                        style={{
+                            margin: '0.28em 0',
+                            paddingLeft: '1.45em',
+                            listStyleType: className?.includes('contains-task-list') ? 'none' : 'disc',
+                        }}
+                    >
+                        {children}
+                    </ul>
+                ),
             }}
         >
             {text}
@@ -309,6 +335,12 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
         whiteSpace: 'pre-wrap',
     };
 
+    const markdownStyle: React.CSSProperties = {
+        ...commonStyle,
+        lineHeight: textStyle.lineHeight || 1.25,
+        whiteSpace: 'pre-line',
+    };
+
     useLayoutEffect(() => {
         if (!isEditing || !measureRef.current) return;
 
@@ -363,7 +395,7 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
                 {textStyle.fontFamily?.includes('mono') ? (
                     text || ' '
                 ) : (
-                    <MarkdownContent text={text || ' '} commonStyle={commonStyle} baseFontSize={baseFontSize} />
+                    <MarkdownContent text={text || ' '} commonStyle={markdownStyle} baseFontSize={baseFontSize} />
                 )}
             </div>
 
@@ -464,7 +496,7 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
                                 {text}
                             </pre>
                         ) : (
-                            <MarkdownContent text={text} commonStyle={commonStyle} baseFontSize={baseFontSize} />
+                            <MarkdownContent text={text} commonStyle={markdownStyle} baseFontSize={baseFontSize} />
                         )}
                     </div>
                 )}
