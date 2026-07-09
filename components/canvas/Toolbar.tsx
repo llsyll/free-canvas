@@ -40,9 +40,14 @@ type ToolbarProps = {
     onRedo: () => void;
     onSaveFile: () => void;
     onOpenFile: () => void;
+    onExportCurrentView: () => void;
+    onExportSelection: () => void;
+    onExportCanvas: () => void;
+    onExportTextSelection: () => void;
     onEnterFullscreen: () => void;
     onEnterCanvasOnly: () => void;
     hasSelection: boolean;
+    hasTextSelection: boolean;
     onAlignLeft: () => void;
     onAlignCenter: () => void;
     onAlignRight: () => void;
@@ -132,9 +137,14 @@ export default function Toolbar({
     onRedo,
     onSaveFile,
     onOpenFile,
+    onExportCurrentView,
+    onExportSelection,
+    onExportCanvas,
+    onExportTextSelection,
     onEnterFullscreen,
     onEnterCanvasOnly,
     hasSelection,
+    hasTextSelection,
     onAlignLeft,
     onAlignCenter,
     onAlignRight,
@@ -241,6 +251,11 @@ export default function Toolbar({
             >
                 <MenuItem onClick={onSaveFile} icon={<Download className="h-3.5 w-3.5" strokeWidth={1.9} />} label="导出 JSON" />
                 <MenuItem onClick={onOpenFile} icon={<Upload className="h-3.5 w-3.5" strokeWidth={1.9} />} label="导入 JSON" />
+                <Divider />
+                <MenuItem onClick={onExportCurrentView} icon={<Download className="h-3.5 w-3.5" strokeWidth={1.9} />} label="导出当前视图" />
+                <MenuItem onClick={onExportSelection} disabled={!hasSelection} icon={<Download className="h-3.5 w-3.5" strokeWidth={1.9} />} label="导出选中内容" />
+                <MenuItem onClick={onExportCanvas} icon={<Download className="h-3.5 w-3.5" strokeWidth={1.9} />} label="导出完整画布" />
+                <MenuItem onClick={onExportTextSelection} disabled={!hasTextSelection} icon={<Download className="h-3.5 w-3.5" strokeWidth={1.9} />} label="导出完整文字" />
             </MenuGroup>
 
             <Divider />

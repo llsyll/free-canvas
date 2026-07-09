@@ -118,6 +118,12 @@ select {
   display: none !important;
 }
 
+.image-exporting .text-node-frame {
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
 .canvas-content-only .react-flow__selection,
 .canvas-content-only .react-flow__selectionpane,
 .canvas-content-only .selection-area {

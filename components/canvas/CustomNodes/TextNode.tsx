@@ -32,7 +32,7 @@ type MarkdownContentProps = {
     baseFontSize: number;
 };
 
-function MarkdownContent({ text, commonStyle, baseFontSize }: MarkdownContentProps) {
+export function MarkdownContent({ text, commonStyle, baseFontSize }: MarkdownContentProps) {
     const headingBase = {
         ...commonStyle,
         fontWeight: 700,
@@ -453,7 +453,7 @@ const TextNodeSimpler = ({ id, data, selected, width, height }: NodeProps) => {
                 </div>
             )}
 
-            <div className={`
+            <div className={`text-node-frame
                 w-full h-full
                 transition-all duration-200
                 ${selected && !isEditing

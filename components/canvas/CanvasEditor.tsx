@@ -6,6 +6,8 @@ import {
     MiniMap,
     Controls,
     Background,
+    getNodesBounds,
+    getViewportForBounds,
     useNodesState,
     useEdgesState,
     addEdge,
@@ -17,13 +19,21 @@ import {
     Node,
     Panel,
 } from '@xyflow/react';
+import { toPng } from 'html-to-image';
 import { ChevronDown, ChevronRight, Cloud, Loader2, LogOut, Save, Trash2 } from 'lucide-react';
 
 import '@xyflow/react/dist/style.css';
 import ImageNode from './CustomNodes/ImageNode';
-import TextNode from './CustomNodes/TextNode';
+import TextNode, { MarkdownContent } from './CustomNodes/TextNode';
 import Toolbar, { ToolMode } from './Toolbar';
 import ContextBar from './ContextBar';
+import {
+    clampExportDimensions,
+    EXPORT_EXCLUDE_CLASS,
+    expandExportBounds,
+    hasExcludedExportClass,
+    makeExportFileName,
+} from '@/lib/exportImageUtils';
 
 const nodeTypes = {
     image: ImageNode,
@@ -61,9 +71,26 @@ type CloudSaveOptions = {
     silent?: boolean;
     refreshFiles?: boolean;
 };
+type TextExportSnapshot = {
+    label: string;
+    width: number;
+    textStyle: {
+        color?: string;
+        fontFamily?: string;
+        fontWeight?: string;
+        fontStyle?: string;
+        textDecoration?: string;
+        textAlign?: 'left' | 'center' | 'right';
+        fontSize?: number;
+        lineHeight?: number;
+        letterSpacing?: number;
+    };
+};
 
 const API_REQUEST_TIMEOUT_MS = 20000;
 const CLOUD_SAVE_MAX_BYTES = 1_800_000;
+const EXPORT_PADDING = 32;
+const EXPORT_MAX_SIDE = 8192;
 const IMAGE_MAX_SOURCE_DIMENSION = 1200;
 const IMAGE_EXPORT_QUALITY = 0.72;
 const IMAGE_EXPORT_TYPE = 'image/jpeg';
@@ -135,6 +162,53 @@ function isCoarsePointerDevice() {
     return window.matchMedia(COARSE_POINTER_QUERY).matches || navigator.maxTouchPoints > 0;
 }
 
+function downloadDataUrl(dataUrl: string, fileName: string) {
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function waitForPaint() {
+    return new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+}
+
+function shouldIncludeInImageExport(node: HTMLElement) {
+    if (hasExcludedExportClass(node.className || '')) return false;
+    if (node.closest(`.${EXPORT_EXCLUDE_CLASS}`)) return false;
+    if (node.closest('.canvas-toolbar')) return false;
+    if (node.closest('.react-flow__panel')) return false;
+    if (node.closest('.react-flow__controls')) return false;
+    if (node.closest('.react-flow__minimap')) return false;
+    if (node.closest('.react-flow__attribution')) return false;
+    if (node.closest('.react-flow__selection')) return false;
+    if (node.closest('.react-flow__selectionpane')) return false;
+    if (node.closest('.react-flow__resize-control')) return false;
+    if (node.closest('.nodrag')) return false;
+    return true;
+}
+
+async function exportWithHiddenChrome<T>(root: HTMLElement | null, callback: () => Promise<T>) {
+    root?.classList.add('image-exporting');
+    const viewport = root?.querySelector('.react-flow__viewport');
+    if (viewport instanceof HTMLElement) {
+        viewport.classList.add('image-exporting');
+    }
+    try {
+        await waitForPaint();
+        return await callback();
+    } finally {
+        root?.classList.remove('image-exporting');
+        if (viewport instanceof HTMLElement) {
+            viewport.classList.remove('image-exporting');
+        }
+    }
+}
+
 function loadImageSource(src: string) {
     return new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
@@ -190,6 +264,64 @@ async function prepareImageForCanvas(file: File) {
         width,
         height,
     };
+}
+
+function TextExportStage({
+    snapshot,
+    stageRef,
+}: {
+    snapshot: TextExportSnapshot | null;
+    stageRef: React.RefObject<HTMLDivElement | null>;
+}) {
+    if (!snapshot) return null;
+
+    const baseFontSize = snapshot.textStyle.fontSize || 16;
+    const commonStyle: React.CSSProperties = {
+        fontSize: `${baseFontSize}px`,
+        lineHeight: snapshot.textStyle.lineHeight || 1.5,
+        letterSpacing: snapshot.textStyle.letterSpacing ? `${snapshot.textStyle.letterSpacing}px` : 'normal',
+        color: snapshot.textStyle.color || '#18181b',
+        fontFamily: snapshot.textStyle.fontFamily || 'var(--font-geist-sans), sans-serif',
+        fontWeight: snapshot.textStyle.fontWeight || 'normal',
+        fontStyle: snapshot.textStyle.fontStyle || 'normal',
+        textDecoration: snapshot.textStyle.textDecoration || 'none',
+        textAlign: snapshot.textStyle.textAlign || 'left',
+        whiteSpace: 'pre-wrap',
+    };
+    const markdownStyle: React.CSSProperties = {
+        ...commonStyle,
+        lineHeight: snapshot.textStyle.lineHeight || 1.25,
+        whiteSpace: 'pre-line',
+    };
+
+    return (
+        <div
+            ref={stageRef}
+            className="pointer-events-none fixed left-0 top-0 z-[-1] bg-[#f6f6f3]"
+            style={{
+                width: Math.max(120, snapshot.width),
+                padding: EXPORT_PADDING,
+            }}
+        >
+            {snapshot.textStyle.fontFamily?.includes('mono') ? (
+                <pre
+                    style={{
+                        ...commonStyle,
+                        margin: 0,
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
+                    }}
+                >
+                    {snapshot.label}
+                </pre>
+            ) : (
+                <div style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                    <MarkdownContent text={snapshot.label} commonStyle={markdownStyle} baseFontSize={baseFontSize} />
+                </div>
+            )}
+        </div>
+    );
 }
 
 async function apiJson<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -433,6 +565,7 @@ function CanvasEditorContent() {
     const cloudAutosaveQueuedRef = useRef(false);
     const lastCloudSnapshotRef = useRef('');
     const saveCloudShortcutRef = useRef<() => void>(() => undefined);
+    const textExportRef = useRef<HTMLDivElement>(null);
 
     const [toolMode, setToolMode] = useState<ToolMode>('select');
     const [textInsertMode, setTextInsertMode] = useState(false);
@@ -455,6 +588,8 @@ function CanvasEditorContent() {
     const [cloudPanelOpen, setCloudPanelOpen] = useState(false);
     const [chromeMode, setChromeMode] = useState<ChromeMode>('normal');
     const [isTouchViewport, setIsTouchViewport] = useState(false);
+    const [exportMessage, setExportMessage] = useState('');
+    const [textExportSnapshot, setTextExportSnapshot] = useState<TextExportSnapshot | null>(null);
 
     // Undo/Redo state
     const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
@@ -537,6 +672,135 @@ function CanvasEditorContent() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }, [edges, nodes]);
+
+    const handleExportCurrentView = useCallback(async () => {
+        if (!canvasRef.current) return;
+
+        setExportMessage('正在导出当前视图...');
+        try {
+            const dataUrl = await exportWithHiddenChrome(canvasRef.current, () => toPng(canvasRef.current as HTMLElement, {
+                    cacheBust: true,
+                    pixelRatio: 2,
+                    backgroundColor: '#f6f6f3',
+                    filter: (node) => node instanceof HTMLElement ? shouldIncludeInImageExport(node) : true,
+                }),
+            );
+            downloadDataUrl(dataUrl, makeExportFileName(canvasTitle, 'view'));
+            setExportMessage('当前视图已导出');
+        } catch (error) {
+            setExportMessage(`导出失败：${getErrorMessage(error)}`);
+        }
+    }, [canvasTitle]);
+
+    const handleExportNodesImage = useCallback(async (mode: 'selection' | 'canvas') => {
+        const viewportElement = canvasRef.current?.querySelector('.react-flow__viewport');
+        if (!(viewportElement instanceof HTMLElement)) return;
+
+        const targetNodes = mode === 'selection' ? nodes.filter((node) => node.selected) : nodes;
+        if (targetNodes.length === 0) {
+            setExportMessage(mode === 'selection' ? '请先选中要导出的内容' : '画布为空');
+            return;
+        }
+
+        setExportMessage(mode === 'selection' ? '正在导出选中内容...' : '正在导出完整画布...');
+        try {
+            const bounds = expandExportBounds(getNodesBounds(targetNodes), EXPORT_PADDING);
+            const exportSize = clampExportDimensions({ width: bounds.width, height: bounds.height }, EXPORT_MAX_SIDE);
+            const viewport = getViewportForBounds(
+                bounds,
+                exportSize.width,
+                exportSize.height,
+                0.05,
+                4,
+                0,
+            );
+
+            const dataUrl = await exportWithHiddenChrome(canvasRef.current, () => toPng(viewportElement, {
+                    cacheBust: true,
+                    width: exportSize.width,
+                    height: exportSize.height,
+                    backgroundColor: '#f6f6f3',
+                    pixelRatio: 1,
+                    filter: (node) => node instanceof HTMLElement ? shouldIncludeInImageExport(node) : true,
+                    style: {
+                        width: `${exportSize.width}px`,
+                        height: `${exportSize.height}px`,
+                        transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+                    },
+                }),
+            );
+            downloadDataUrl(dataUrl, makeExportFileName(canvasTitle, mode));
+            setExportMessage(mode === 'selection' ? '选中内容已导出' : '完整画布已导出');
+        } catch (error) {
+            setExportMessage(`导出失败：${getErrorMessage(error)}`);
+        }
+    }, [canvasTitle, nodes]);
+
+    const handleExportSelection = useCallback(() => {
+        void handleExportNodesImage('selection');
+    }, [handleExportNodesImage]);
+
+    const handleExportCanvasImage = useCallback(() => {
+        void handleExportNodesImage('canvas');
+    }, [handleExportNodesImage]);
+
+    const handleExportTextSelection = useCallback(async () => {
+        const textNode = nodes.find((node) => node.selected && node.type === 'text');
+        if (!textNode) {
+            setExportMessage('请先选中一个文字节点');
+            return;
+        }
+
+        const data = textNode.data as {
+            label?: string;
+            textStyle?: TextExportSnapshot['textStyle'];
+        };
+        const label = data.label || '';
+        if (!label.trim()) {
+            setExportMessage('文字节点为空');
+            return;
+        }
+
+        setExportMessage('正在导出完整文字...');
+        setTextExportSnapshot({
+            label,
+            width: Math.max(120, Math.round(textNode.width || 360)),
+            textStyle: data.textStyle || {},
+        });
+
+        try {
+            await waitForPaint();
+            const element = textExportRef.current;
+            if (!element) throw new Error('文字导出区域未准备好');
+            const width = element.scrollWidth;
+            const height = element.scrollHeight;
+            const exportSize = clampExportDimensions({ width, height }, EXPORT_MAX_SIDE);
+            const dataUrl = await toPng(element, {
+                cacheBust: true,
+                width,
+                height,
+                canvasWidth: exportSize.width,
+                canvasHeight: exportSize.height,
+                backgroundColor: '#f6f6f3',
+                pixelRatio: 1,
+                style: {
+                    position: 'static',
+                    left: '0',
+                    top: '0',
+                    zIndex: '0',
+                    transform: 'none',
+                    width: `${width}px`,
+                    height: `${height}px`,
+                },
+            });
+            downloadDataUrl(dataUrl, makeExportFileName(canvasTitle, 'text'));
+            setExportMessage('完整文字已导出');
+        } catch (error) {
+            setExportMessage(`导出失败：${getErrorMessage(error)}`);
+        } finally {
+            setTextExportSnapshot(null);
+        }
+    }, [canvasTitle, nodes]);
 
     const handleOpenFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -1286,6 +1550,7 @@ function CanvasEditorContent() {
     const isCanvasOnlyMode = chromeMode === 'canvasOnly';
     const isChromeHidden = chromeMode !== 'normal';
     const hasSelection = nodes.some((node) => node.selected);
+    const hasTextSelection = nodes.some((node) => node.selected && node.type === 'text');
     const currentCanvasBytes = getTextByteLength(getCloudRequestBody(
         currentCanvasId,
         canvasTitle.trim() || '未命名画布',
@@ -1353,9 +1618,14 @@ function CanvasEditorContent() {
                         onRedo={redo}
                         onSaveFile={handleSaveFile}
                         onOpenFile={() => fileInputRef.current?.click()}
+                        onExportCurrentView={() => void handleExportCurrentView()}
+                        onExportSelection={handleExportSelection}
+                        onExportCanvas={handleExportCanvasImage}
+                        onExportTextSelection={() => void handleExportTextSelection()}
                         onEnterFullscreen={handleEnterFullscreen}
                         onEnterCanvasOnly={handleEnterCanvasOnly}
                         hasSelection={hasSelection}
+                        hasTextSelection={hasTextSelection}
                         onAlignLeft={handleAlignLeft}
                         onAlignCenter={handleAlignCenter}
                         onAlignRight={handleAlignRight}
@@ -1563,6 +1833,11 @@ function CanvasEditorContent() {
                         Esc 退出全屏专注
                     </div>
                 )}
+                {exportMessage && !isChromeHidden && (
+                    <div className={`${EXPORT_EXCLUDE_CLASS} pointer-events-none fixed bottom-4 left-1/2 z-[9999] -translate-x-1/2 rounded-md border border-zinc-200/80 bg-white/80 px-2.5 py-1.5 text-xs text-zinc-500 shadow-[0_8px_24px_rgba(24,24,27,0.05)] backdrop-blur-xl`}>
+                        {exportMessage}
+                    </div>
+                )}
 
                 {/* Hidden File Input */}
                 <input
@@ -1573,6 +1848,7 @@ function CanvasEditorContent() {
                     onChange={handleOpenFile}
                 />
             </ReactFlow>
+            <TextExportStage snapshot={textExportSnapshot} stageRef={textExportRef} />
             {!isChromeHidden && isTouchViewport && (
                 <div className="mobile-toolbar-dock">
                     <Toolbar
@@ -1587,9 +1863,14 @@ function CanvasEditorContent() {
                         onRedo={redo}
                         onSaveFile={handleSaveFile}
                         onOpenFile={() => fileInputRef.current?.click()}
+                        onExportCurrentView={() => void handleExportCurrentView()}
+                        onExportSelection={handleExportSelection}
+                        onExportCanvas={handleExportCanvasImage}
+                        onExportTextSelection={() => void handleExportTextSelection()}
                         onEnterFullscreen={handleEnterFullscreen}
                         onEnterCanvasOnly={handleEnterCanvasOnly}
                         hasSelection={hasSelection}
+                        hasTextSelection={hasTextSelection}
                         onAlignLeft={handleAlignLeft}
                         onAlignCenter={handleAlignCenter}
                         onAlignRight={handleAlignRight}

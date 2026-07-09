@@ -115,7 +115,7 @@ export default function ContextBar() {
     if (!selectedNode) return null;
 
     return (
-        <div className="fixed left-1/2 top-4 z-[9999] flex max-w-[calc(100vw-180px)] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-lg border border-zinc-200/90 bg-white/95 px-2 py-1.5 text-sm text-zinc-800 shadow-[0_8px_24px_rgba(24,24,27,0.08)] backdrop-blur-xl">
+        <div className="image-export-exclude fixed left-1/2 top-4 z-[9999] flex max-w-[calc(100vw-180px)] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-lg border border-zinc-200/90 bg-white/95 px-2 py-1.5 text-sm text-zinc-800 shadow-[0_8px_24px_rgba(24,24,27,0.08)] backdrop-blur-xl">
             <select
                 value={style.fontFamily || FONTS[0].value}
                 onChange={(e) => update('fontFamily', e.target.value)}
@@ -217,7 +217,7 @@ export default function ContextBar() {
             {colorOpen && typeof window !== 'undefined' && createPortal(
                 <div
                     ref={colorPanelRef}
-                    className="fixed z-[10000] rounded-xl border border-zinc-200/90 bg-white p-2 shadow-[0_12px_36px_rgba(24,24,27,0.14)]"
+                    className="image-export-exclude fixed z-[10000] rounded-xl border border-zinc-200/90 bg-white p-2 shadow-[0_12px_36px_rgba(24,24,27,0.14)]"
                     style={{ top: `${colorPanelPosition.top}px`, left: `${colorPanelPosition.left}px` }}
                 >
                     <SketchPicker
